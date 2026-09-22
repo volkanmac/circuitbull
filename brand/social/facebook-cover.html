@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Sans:wght@500;600&display=swap" rel="stylesheet"/>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 1640px;
+      height: 624px;
+      overflow: hidden;
+      background: #0a0707;
+    }
+    .stage { position: relative; width: 1640px; height: 624px; }
+    .bg {
+      position: absolute;
+      inset: 0;
+      background: url("./cover-bg.png") center / cover no-repeat;
+    }
+    .shade {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(8,5,5,.78) 0 210px, rgba(8,5,5,.42) 420px, rgba(8,5,5,.12) 720px, rgba(0,0,0,.18) 100%),
+        linear-gradient(180deg, rgba(0,0,0,.28) 0, transparent 28%, transparent 62%, rgba(0,0,0,.5) 100%);
+    }
+    .mark {
+      position: absolute;
+      left: 236px;
+      top: 78px;
+      width: 52px;
+      height: 52px;
+      filter: drop-shadow(0 2px 10px rgba(0,0,0,.55));
+    }
+    .copy {
+      position: absolute;
+      left: 236px;
+      top: 148px;
+      width: 680px;
+      color: #F4F3EF;
+      text-shadow: 0 3px 22px rgba(0,0,0,.62);
+    }
+    .kicker {
+      margin: 0 0 10px;
+      font-family: "Barlow Condensed", sans-serif;
+      font-weight: 700;
+      font-size: 22px;
+      letter-spacing: .34em;
+      color: #EC3536;
+    }
+    .title {
+      margin: 0;
+      font-family: "Barlow Condensed", sans-serif;
+      font-weight: 800;
+      font-size: 88px;
+      line-height: .88;
+      letter-spacing: .06em;
+    }
+    .sub {
+      margin: 18px 0 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      font-weight: 500;
+      font-size: 21px;
+      letter-spacing: .04em;
+      color: #EDE6D4;
+    }
+    .url {
+      margin: 14px 0 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      font-weight: 600;
+      font-size: 16px;
+      letter-spacing: .18em;
+      color: #C4B896;
+    }
+    .cam {
+      position: absolute;
+      right: 36px;
+      bottom: -18px;
+      height: 560px;
+      width: auto;
+      filter: drop-shadow(0 22px 36px rgba(0,0,0,.7));
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="bg"></div>
+    <div class="shade"></div>
+    <img class="mark" src="./mark.svg" alt=""/>
+    <div class="copy">
+      <p class="kicker">COOLED MWIR</p>
+      <h1 class="title">CIRCUITBULL</h1>
+      <p class="sub">640×512 · 40–800 mm · 55 km detection</p>
+      <p class="url">CIRCUITBULL.COM</p>
+    </div>
+    <img class="cam" src="./cover-cam.png" alt=""/>
+  </div>
+</body>
+</html>

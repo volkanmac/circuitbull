@@ -1,0 +1,47 @@
+name = "circuitbull"
+main = "worker/src/index.ts"
+compatibility_date = "2025-09-01"
+account_id = "6b8cb63e1b76f4a92896c330f6f74803"
+workers_dev = true
+
+[[routes]]
+pattern = "circuitbull.com/*"
+zone_name = "circuitbull.com"
+
+[[routes]]
+pattern = "www.circuitbull.com/*"
+zone_name = "circuitbull.com"
+
+[[kv_namespaces]]
+binding = "DATA"
+id = "581b3398eed0414f8b49b7c79b83c4e5"
+preview_id = "581b3398eed0414f8b49b7c79b83c4e5"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "circuitbull-media"
+preview_bucket_name = "circuitbull-media"
+
+[vars]
+SITE_URL = "https://circuitbull.com"
+CDN_BASE = "https://cdn.circuitbull.com"
+DEFAULT_LOCALE = "en"
+BRAND_NAME = "Circuitbull"
+COMPANY_LEGAL_NAME = "Volls Global Inc"
+CF_ACCOUNT_ID = "6b8cb63e1b76f4a92896c330f6f74803"
+CF_AI_EMBED_MODEL = "@cf/baai/bge-base-en-v1.5"
+CF_AI_MODEL = "@cf/moonshotai/kimi-k2.7-code"
+SES_HOST = "email-smtp.eu-central-1.amazonaws.com"
+SES_PORT = "465"
+SES_FROM = "volkan@volls.us"
+SES_NOTIFY_TO = "volkan@volls.us"
+
+# Facebook Page cron (UTC): 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00
+[triggers]
+crons = ["0 */3 * * *"]
+
+# Secrets (set via wrangler secret / .dev.vars): SES_USER, SES_PASS, REDIS_URL
+# WhatsApp Cloud API: .env + KV config:whatsapp (WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_WABA_ID, WHATSAPP_TEMPLATE)
+# Facebook Page: wrangler secret put FACEBOOK_PAGE_TOKEN
+#   + FACEBOOK_PAGE_ID (secret or KV config:facebook) · optional FACEBOOK_DRY_RUN=1, FACEBOOK_GRAPH_VERSION=v21.0
+

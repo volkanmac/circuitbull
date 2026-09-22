@@ -1,0 +1,53 @@
+{
+  "name": "circuitbull",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node scripts/verify-connections.mjs",
+    "seed": "node scripts/seed.mjs",
+    "scrape": "node scripts/scrape-argustec.mjs",
+    "assign-smartids": "node scripts/assign-smartids.mjs",
+    "migrate-sku-cb": "node scripts/migrate-sku-to-cb.mjs",
+    "sync-kv": "node scripts/sync-kv.mjs",
+    "sync-whatsapp-config": "node scripts/sync-whatsapp-config.mjs",
+    "sync-facebook-config": "node scripts/sync-facebook-config.mjs",
+    "sync-redis-catalog": "node scripts/sync-redis-catalog.mjs",
+    "sync-media": "node scripts/sync-media.mjs",
+    "rename-cdn-slugs": "node scripts/rename-cdn-slugs.mjs",
+    "sync-neo4j-products": "node scripts/sync-neo4j-products.mjs",
+    "load-ontology-graph": "node scripts/load-ontology-graph.mjs",
+    "sync-neo4j-ontology": "node scripts/sync-neo4j-ontology.mjs",
+    "llm-clean": "node scripts/llm-clean-datasheets.mjs",
+    "llm-translate": "node scripts/llm-translate-products.mjs",
+    "llm-seo": "node scripts/llm-seo-pages.mjs",
+    "generate-datasheet-pdfs": "node scripts/generate-datasheet-pdfs.mjs",
+    "llm-parse-facts": "node scripts/llm-parse-facts.mjs",
+    "llm-classify-solutions": "node scripts/llm-classify-solutions.mjs",
+    "llm-solution-filter-copy": "node scripts/llm-solution-filter-copy.mjs",
+    "llm-translate-facts": "node scripts/llm-translate-facts.mjs",
+    "sync-qdrant-facts": "node scripts/sync-qdrant-facts.mjs",
+    "sync-qdrant-catalog": "node scripts/sync-qdrant-catalog.mjs",
+    "rewrite-cdn": "node scripts/rewrite-cdn-urls.mjs",
+    "ai-generate-solution-media": "node scripts/ai-generate-solution-media.mjs",
+    "ai-clean-product-images": "node scripts/ai-clean-product-images.mjs",
+    "test-ses": "node scripts/test-ses.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "dotenv": "^16.4.7",
+    "hono": "^4.7.2",
+    "mongodb": "^6.14.2",
+    "neo4j-driver": "^5.28.1",
+    "nodemailer": "^10.0.10",
+    "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260921.1",
+    "playwright": "^1.49.1",
+    "typescript": "^5.8.2",
+    "wrangler": "^4.1.0"
+  }
+}
