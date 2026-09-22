@@ -36,13 +36,18 @@ SES_PORT = "465"
 SES_FROM = "volkan@volls.us"
 SES_NOTIFY_TO = "volkan@volls.us"
 INDEXNOW_KEY = "cbidx7f3e91a2d64c8b9e1f0a4d6c8b2e19"
+PINTEREST_APP_ID = "1614500"
+PINTEREST_BOARD_ID = "1152288323350914714"
 
 # Facebook Page cron (UTC): 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00
+# Pinterest cron (UTC): 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 — one product, next locale
 [triggers]
-crons = ["0 */3 * * *"]
+crons = ["0 */3 * * *", "0 */4 * * *"]
 
 # Secrets (set via wrangler secret / .dev.vars): SES_USER, SES_PASS, REDIS_URL
 # WhatsApp Cloud API: .env + KV config:whatsapp (WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_WABA_ID, WHATSAPP_TEMPLATE)
 # Facebook Page: wrangler secret put FACEBOOK_PAGE_TOKEN
 #   + FACEBOOK_PAGE_ID (secret or KV config:facebook) · optional FACEBOOK_DRY_RUN=1, FACEBOOK_GRAPH_VERSION=v21.0
+# Pinterest: wrangler secret put PINTEREST_ACCESS_TOKEN, PINTEREST_REFRESH_TOKEN, PINTEREST_APP_SECRET
+#   Board Circuitbull (public) is PINTEREST_BOARD_ID. Optional PINTEREST_DRY_RUN=1, PINTEREST_CRON_SECRET
 

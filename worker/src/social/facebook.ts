@@ -58,6 +58,9 @@ export type FacebookDraft = {
   solutionTitle: string;
   imageUrl: string;
   pageUrl: string;
+  benefits: string[];
+  overview: string[];
+  applications: string[];
   caption: string;
   captionSource: "agent" | "template";
 };
@@ -114,72 +117,6 @@ const HASHTAGS: Record<string, string> = {
   ko: "#Circuitbull #열화상",
 };
 
-const COPY: Record<
-  string,
-  { kicker: string; fielded: string; see: string; mission: string }
-> = {
-  en: {
-    kicker: "Circuitbull® mission catalog",
-    fielded: "Specified for",
-    see: "Open the platform",
-    mission: "Open the mission",
-  },
-  tr: {
-    kicker: "Circuitbull® görev kataloğu",
-    fielded: "Görev",
-    see: "Platformu aç",
-    mission: "Görevi aç",
-  },
-  ar: {
-    kicker: "كتالوج Circuitbull® للمهام",
-    fielded: "محدد لـ",
-    see: "افتح المنصة",
-    mission: "افتح المهمة",
-  },
-  es: {
-    kicker: "Catálogo de misión Circuitbull®",
-    fielded: "Especificado para",
-    see: "Abrir la plataforma",
-    mission: "Abrir la misión",
-  },
-  de: {
-    kicker: "Circuitbull® Einsatzkatalog",
-    fielded: "Spezifiziert für",
-    see: "Plattform öffnen",
-    mission: "Einsatz öffnen",
-  },
-  fr: {
-    kicker: "Catalogue de mission Circuitbull®",
-    fielded: "Spécifié pour",
-    see: "Ouvrir la plateforme",
-    mission: "Ouvrir la mission",
-  },
-  ru: {
-    kicker: "Каталог миссий Circuitbull®",
-    fielded: "Для задачи",
-    see: "Открыть платформу",
-    mission: "Открыть миссию",
-  },
-  "zh-Hant": {
-    kicker: "Circuitbull® 任務型錄",
-    fielded: "適用於",
-    see: "開啟平台",
-    mission: "開啟任務",
-  },
-  it: {
-    kicker: "Catalogo missione Circuitbull®",
-    fielded: "Specificato per",
-    see: "Apri la piattaforma",
-    mission: "Apri la missione",
-  },
-  ko: {
-    kicker: "Circuitbull® 미션 카탈로그",
-    fielded: "적용 임무",
-    see: "플랫폼 열기",
-    mission: "미션 열기",
-  },
-};
-
 function trim(s: unknown) {
   return String(s || "").trim();
 }
@@ -226,14 +163,28 @@ export function nextFacebookSlot(at = Date.now()) {
   return { ...facebookSlot(nextAt), at: nextAt };
 }
 
+function asLines(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => trim(item)).filter(Boolean);
+}
+
 function productCopy(p: any, lang: string) {
   const l = normalizeLang(lang);
   const block = p?.i18n?.[l] || p?.i18n?.en || {};
+  const ds = p?.datasheet?.i18n?.[l] || p?.datasheet?.i18n?.en || {};
   return {
     name: block.name || p?.name || "",
     summary: block.summary || p?.summary || "",
     description: block.description || p?.description || "",
-    applications: block.applications?.length ? block.applications : p?.applications || [],
+    benefits: asLines(block.benefits?.length ? block.benefits : ds.benefits?.length ? ds.benefits : p?.benefits || p?.datasheet?.benefits),
+    overview: asLines(block.overview?.length ? block.overview : ds.overview?.length ? ds.overview : p?.overview || p?.datasheet?.overview),
+    applications: asLines(
+      block.applications?.length
+        ? block.applications
+        : ds.applications?.length
+          ? ds.applications
+          : p?.applications || p?.datasheet?.applications
+    ),
   };
 }
 
@@ -266,21 +217,60 @@ function linkedSolutionSlug(p: any): string {
   return SOLUTION_SLUGS[0];
 }
 
-function clip(s: string, n: number) {
-  const t = String(s || "").replace(/\s+/g, " ").trim();
-  if (t.length <= n) return t;
-  return `${t.slice(0, n - 1).trim()}…`;
+const USED: Record<string, string> = {
+  en: "Used for",
+  tr: "Kullanıldığı yer",
+  ar: "يُستخدم في",
+  es: "Se usa para",
+  de: "Im Einsatz für",
+  fr: "Utilisé pour",
+  ru: "Где работает",
+  "zh-Hant": "用於",
+  it: "Si usa per",
+  ko: "쓰이는 곳",
+};
+
+function hookLine(lang: string, benefit: string): string {
+  const b = benefit.replace(/\s+/g, " ").replace(/[.。]+$/g, "").trim();
+  const lower = b ? b.charAt(0).toLowerCase() + b.slice(1) : b;
+  switch (normalizeLang(lang)) {
+    case "tr":
+      return `${b} yapan canavarla tanışın.`;
+    case "de":
+      return `Lernen Sie das Gerät kennen, das ${lower} leistet.`;
+    case "fr":
+      return `Voici l’appareil qui assure ${lower}.`;
+    case "es":
+      return `Conozca el equipo que logra ${lower}.`;
+    case "ar":
+      return `تعرّف على الجهاز الذي يقدّم ${b}.`;
+    case "ru":
+      return `Познакомьтесь с машиной, которая даёт ${lower}.`;
+    case "it":
+      return `Ecco la macchina che offre ${lower}.`;
+    case "ko":
+      return `${b}를 해내는 장비를 만나보세요.`;
+    case "zh-Hant":
+      return `認識這台能做到${b}的設備。`;
+    default:
+      return `Meet the beast that delivers ${lower}.`;
+  }
+}
+
+function sentence(s: string) {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  return /[.!?。！？]$/.test(t) ? t : `${t}.`;
 }
 
 function templateCaption(draft: Omit<FacebookDraft, "caption" | "captionSource">): string {
-  const ui = COPY[draft.lang] || COPY.en;
   const tags = HASHTAGS[draft.lang] || HASHTAGS.en;
-  const lead = clip(draft.kind === "product" ? `${draft.name}. ${draft.sku || ""}`.trim() : draft.solutionTitle, 180);
-  const body =
-    draft.kind === "product"
-      ? `${ui.kicker}\n${lead}\n${ui.fielded}: ${draft.solutionTitle}.\n${ui.see}\n${draft.pageUrl}\n\n${tags}`
-      : `${ui.kicker}\n${draft.solutionTitle}\n${ui.fielded}: ${draft.name}${draft.sku ? ` · ${draft.sku}` : ""}.\n${ui.mission}\n${draft.pageUrl}\n\n${tags}`;
-  return body.trim();
+  const benefit = draft.benefits?.[0] || draft.name;
+  const hook = hookLine(draft.lang, benefit);
+  const plain = (draft.overview?.length ? draft.overview : (draft.benefits || []).slice(1)).slice(0, 3).map(sentence).filter(Boolean);
+  const uses = (draft.applications || []).slice(0, 4);
+  const used = uses.length ? `${USED[draft.lang] || USED.en}: ${uses.join(", ")}.` : "";
+  return [hook, ...plain, used, "", draft.pageUrl, "", tags].filter((line) => line !== undefined).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function extractAiText(json: any) {
@@ -311,9 +301,9 @@ async function composeWithAi(env: FacebookEnv, draft: Omit<FacebookDraft, "capti
   const locale = LOCALE_NAME[draft.lang] || draft.lang;
   const tags = HASHTAGS[draft.lang] || HASHTAGS.en;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
+  const timer = setTimeout(() => ctrl.abort(), 14000);
   try {
-    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${encodeURIComponent(model)}`, {
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -321,7 +311,7 @@ async function composeWithAi(env: FacebookEnv, draft: Omit<FacebookDraft, "capti
           {
             role: "system",
             content:
-              "You write Circuitbull® Facebook Page posts for Volls Global Inc (Wilmington DE). G2G / EPC+F thermal, EO-IR, and IoT sensing. Do NOT claim cameras are Made in USA. IoT/SCADA/carbon may be USA-made; thermal/EO-IR are catalog sensors. Write only in the requested locale. 70–120 words. No markdown. No emoji spam. End with the URL on its own line, then the hashtags I give you. Caption only.",
+              "You write one Circuitbull® Facebook caption. Use ONLY the key benefits, overview, and solutions I give you. Do not invent ranges, resolutions, or ratings. Do NOT claim thermal or EO-IR cameras are Made in USA. Write only in the requested language. No markdown, no bullet list, no emoji.\n\nShape:\n1. One opening sentence in that language, built from the FIRST key benefit. Everyday speech, confident, not a spec sheet. Turkish shape to copy only when the language is Turkish: \"Ultra uzun menzilli sürekli zoom ve 16.4 km araç tespiti yapan canavarla tanışın.\" For every other language, the same move: meet the beast / the machine that does that first benefit.\n2. Two or three short sentences that turn the remaining benefits and the overview into words a harbor guard, farmer, or security officer understands. Keep the real numbers (km, resolution, NETD, IP rating, degrees) and say what they mean in the field.\n3. One short sentence on where it is used, taken from the solutions list.\n4. A blank line, then the URL alone on its line, then the hashtags exactly as given.\n\nCaption only. About 70–130 words before the URL.",
           },
           {
             role: "user",
@@ -329,15 +319,17 @@ async function composeWithAi(env: FacebookEnv, draft: Omit<FacebookDraft, "capti
               locale: draft.lang,
               language: locale,
               kind: draft.kind,
-              sku: draft.sku || "",
               product: draft.name,
-              solution: draft.solutionTitle,
+              sku: draft.sku || "",
+              keyBenefits: (draft.benefits || []).slice(0, 8),
+              overview: (draft.overview || []).slice(0, 6),
+              solutions: (draft.applications || []).slice(0, 6),
               url: draft.pageUrl,
               hashtags: tags,
             }),
           },
         ],
-        max_tokens: 420,
+        max_tokens: 520,
       }),
       signal: ctrl.signal,
     });
@@ -393,7 +385,9 @@ export async function buildFacebookDraft(
     const need = needs.find((n) => n.slug === needSlug) || { slug: needSlug };
     const copy = solutionCopy(need, lang);
     const product = pickProduct(opts.products, used, needSlug);
-    const pCopy = product ? productCopy(product, lang) : { name: "", summary: "", description: "", applications: [] };
+    const pCopy = product
+      ? productCopy(product, lang)
+      : { name: "", summary: "", description: "", benefits: [] as string[], overview: [] as string[], applications: [] as string[] };
     const imageUrl = solutionImageUrl(needSlug) || (product ? publicImageUrl(productImageKey(product)) : "");
     if (!imageUrl) return { error: "no_image" };
     const pageUrl = `${SITE_ORIGIN}${solutionPath(lang, needSlug)}`;
@@ -407,6 +401,9 @@ export async function buildFacebookDraft(
       solutionTitle: copy.title,
       imageUrl,
       pageUrl,
+      benefits: pCopy.benefits,
+      overview: pCopy.overview.length ? pCopy.overview : copy.lead ? [copy.lead] : [],
+      applications: pCopy.applications.length ? pCopy.applications : copy.title ? [copy.title] : [],
     };
     const ai = await composeWithAi(env, base);
     return { ...base, caption: ai || templateCaption(base), captionSource: ai ? "agent" : "template" };
@@ -431,6 +428,9 @@ export async function buildFacebookDraft(
     solutionTitle: sol.title,
     imageUrl: publicImageUrl(imageKey),
     pageUrl: `${SITE_ORIGIN}${productPath(lang, product.slug)}`,
+    benefits: pCopy.benefits,
+    overview: pCopy.overview,
+    applications: pCopy.applications.length ? pCopy.applications : sol.title ? [sol.title] : [],
   };
   const ai = await composeWithAi(env, base);
   return { ...base, caption: ai || templateCaption(base), captionSource: ai ? "agent" : "template" };

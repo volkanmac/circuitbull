@@ -85,6 +85,7 @@ import {
   loadState as loadFacebookState,
   runFacebookSlot,
 } from "./social/facebook";
+import { loadPinterestAuth, loadPinterestState, pinterestPublicStatus, runPinterestSlot } from "./social/pinterest";
 
 type Env = {
   DATA: KVNamespace;
@@ -122,6 +123,13 @@ type Env = {
   FACEBOOK_GRAPH_VERSION?: string;
   FACEBOOK_DRY_RUN?: string;
   FACEBOOK_CRON_SECRET?: string;
+  PINTEREST_ACCESS_TOKEN?: string;
+  PINTEREST_REFRESH_TOKEN?: string;
+  PINTEREST_APP_ID?: string;
+  PINTEREST_APP_SECRET?: string;
+  PINTEREST_BOARD_ID?: string;
+  PINTEREST_DRY_RUN?: string;
+  PINTEREST_CRON_SECRET?: string;
 };
 
 const app = new Hono<{ Bindings: Env }>();
@@ -1828,6 +1836,13 @@ async function renderLegal(c: any, lang: string, slug: string) {
   );
 }
 
+app.get("/privacy", (c) => renderLegal(c, DEFAULT_LANG, "data-policy"));
+app.get("/:lang/privacy", (c) => {
+  const lang = c.req.param("lang");
+  if (!isLocaleParam(lang)) return c.notFound();
+  return renderLegal(c, normalizeLang(lang), "data-policy");
+});
+
 for (const slug of LEGAL_SLUGS) {
   app.get(`/${slug}`, (c) => renderLegal(c, DEFAULT_LANG, slug));
   app.get(`/:lang/${slug}`, async (c) => {
@@ -3241,6 +3256,28 @@ app.get("/api/v1/social/facebook/status", async (c) => {
   return c.json(facebookPublicStatus(settings, state));
 });
 
+app.get("/api/v1/social/pinterest/status", async (c) => {
+  const bag = await loadPinterestAuth(c.env);
+  const state = await loadPinterestState(c.env.DATA);
+  return c.json(pinterestPublicStatus(bag, state));
+});
+
+app.post("/api/v1/social/pinterest/run", async (c) => {
+  const hdr = c.req.header("X-A2A-Secret") || c.req.header("Authorization")?.replace(/^Bearer\s+/i, "") || "";
+  const cronOk = Boolean(c.env.PINTEREST_CRON_SECRET) && hdr === c.env.PINTEREST_CRON_SECRET;
+  const a2aOk = Boolean(c.env.A2A_SHARED_SECRET) && hdr === c.env.A2A_SHARED_SECRET;
+  if (!cronOk && !a2aOk) return c.json({ error: "unauthorized" }, 401);
+  const q = c.req.query();
+  const result = await runPinterestSlot(c.env, {
+    source: "manual",
+    lang: q.lang,
+    slug: q.slug,
+    dry: q.dry === "1" || q.dry === "true",
+    force: q.force === "1" || q.force === "true",
+  });
+  return c.json(result, result.ok ? 200 : 500);
+});
+
 app.post("/api/v1/social/facebook/run", async (c) => {
   const secret = c.env.A2A_SHARED_SECRET || c.env.FACEBOOK_CRON_SECRET;
   const hdr = c.req.header("X-A2A-Secret") || c.req.header("Authorization")?.replace(/^Bearer\s+/i, "") || "";
@@ -3296,6 +3333,25 @@ export default {
     return app.fetch(request, env, ctx);
   },
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    const cron = String(controller.cron || "");
+    if (cron.includes("*/4")) {
+      ctx.waitUntil(
+        runPinterestSlot(env, { source: "cron", at: controller.scheduledTime }).then((r) => {
+          console.log(
+            "pinterest_cron",
+            JSON.stringify({
+              ok: r.ok,
+              skipped: "skipped" in r ? r.skipped : undefined,
+              lang: r.lang,
+              slug: "slug" in r ? r.slug : undefined,
+              pinId: "pinId" in r ? r.pinId : undefined,
+              error: "error" in r ? r.error : undefined,
+            })
+          );
+        })
+      );
+      return;
+    }
     ctx.waitUntil(
       runFacebookSlot(env, { source: "cron", at: controller.scheduledTime }).then((r) => {
         console.log(

@@ -18,6 +18,8 @@ coverage/
 worker-ai.txt
 video-ai.txt
 text-to-image.txt
+pinterest.txt
+meta-token.txt
 universal.aii.txt
 universal-ai.txt
 *.aii.txt

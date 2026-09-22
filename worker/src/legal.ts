@@ -25,7 +25,7 @@ const EN: LegalPack = {
   nav: {
     terms: "Terms",
     gdpr: "GDPR",
-    "data-policy": "Data policy",
+    "data-policy": "Privacy policy",
     "code-of-conduct": "Code of conduct",
   },
   updated: "22 September 2026",
@@ -127,11 +127,11 @@ const EN: LegalPack = {
       ],
     },
     "data-policy": {
-      title: "Data policy",
-      seoTitle: "Data policy | Circuitbull®",
+      title: "Privacy policy",
+      seoTitle: "Privacy policy | Circuitbull®",
       seoDescription:
-        "Circuitbull® data and privacy policy — what Volls Global Inc collects, processors, cookies, CCPA, KVKK, and how to request your data.",
-      lead: "This policy describes how Volls Global Inc handles personal data on circuitbull.com: quotes, locale preferences, security logs, and the vendors that help us run the catalog.",
+        "Privacy policy for circuitbull.com and the Circuitbull app — what Volls Global Inc collects, processors, cookies, CCPA, KVKK, and how to request your data.",
+      lead: "This privacy policy describes how Volls Global Inc handles personal data on circuitbull.com and in the Circuitbull application: quotes, locale preferences, security logs, and the vendors that help us run the catalog.",
       sections: [
         {
           heading: "Scope",
