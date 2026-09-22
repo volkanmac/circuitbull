@@ -52,10 +52,13 @@ export const FAVICON_ICO = fromB64(FAVICON_ICO_B64);
 export const APPLE_TOUCH_PNG = fromB64(APPLE_TOUCH_B64);
 
 export function inlineMarkSvg() {
-  return MARK_SVG.replace(/<\?xml[^>]*>\s*/g, "").replace(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="3677.32 4596.38 1561.72 1561.72" width="256" height="256" fill="none">',
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="3677.32 4596.38 1561.72 1561.72" width="48" height="48" fill="none" class="brand-mark" aria-hidden="true" focusable="false">'
-  );
+  return MARK_SVG.replace(/<\?xml[^>]*>\s*/g, "")
+    .replace(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="3677.32 4596.38 1561.72 1561.72" width="256" height="256" fill="none">',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="3677.32 4596.38 1561.72 1561.72" width="48" height="48" fill="none" class="brand-mark" aria-hidden="true" focusable="false">'
+    )
+    /* Header lockup: mark inherits .brand color so it matches the wordmark */
+    .replace(/fill="#EC3536"/g, 'fill="currentColor"');
 }
 
 export const BRAND_HEADERS = {

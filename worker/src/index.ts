@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { sendSmtpMail } from "./email/ses-smtp";
 import { agentCard, a2aProduct, a2aSolution, chatgptPlugin, openApiSpec } from "./a2a/agent";
+import { findCatalog, handleA2aJsonRpc, converse } from "./a2a/find";
+import { applyLinks, deskPack, extractPhone, fundingPrograms, nearestOffice, whatsappOffer } from "./a2a/advise";
 import {
   buildFacetIndex,
   displaySku,
@@ -39,6 +41,7 @@ import {
   hreflangFor,
 } from "./i18n/locales";
 import { legalDoc, legalKicker, legalNav } from "./legal";
+import { catalogDock, categoryKey, foldSearch, productCategoryLabels } from "./i18n/catalog-dock";
 import { fillCount, fillTitle, pageCopy } from "./i18n/page-copy";
 import { capabilitySeo, clipMeta, productSeo, sitemapUrl, solutionSeo } from "./i18n/seo";
 import {
@@ -66,6 +69,7 @@ import { loadPartners } from "./search/partners-store";
 import { buyCtaMarkup, buyChannelForCountry } from "./ui/buy-cta";
 import { composeBuyWhatsApp, customerWaMe, loadWhatsAppSettings, normalizeWhatsApp, sendWhatsAppCloud } from "./buy/whatsapp";
 import { investCopy, investManifestoHtml } from "./ui/invest-manifesto";
+import { flyDockMarkup } from "./ui/fly-dock";
 import { smartFilterMarkup } from "./ui/smart-filter";
 import {
   capabilityCopy,
@@ -97,6 +101,7 @@ type Env = {
   SES_FROM: string;
   SES_NOTIFY_TO: string;
   A2A_SHARED_SECRET?: string;
+  INDEXNOW_KEY?: string;
   QDRANT_URL?: string;
   QDRANT_API_KEY?: string;
   CF_AI_API_TOKEN?: string;
@@ -272,10 +277,17 @@ function productCardHtml(p: any, lang: string) {
   const copy = productCopy(p, lang);
   const imgSrc = p.media?.aiHero || p.image;
   const img = imgSrc ? cdnUrl(imgSrc) : "";
-  return `<a class="product" href="${productPath(lang, p.slug)}">
-      <div class="media">${img ? `<img src="${escapeHtml(img)}" data-full="${escapeHtml(img)}" data-lightbox alt="${escapeHtml(copy.name)}" loading="lazy"/>` : ""}</div>
+  const path = productPath(lang, p.slug);
+  const sku = displaySku(p);
+  const apps = (copy.applications || []).slice(0, 8).join("|");
+  return `<a class="product" href="${path}">
+      <div class="media">${
+        img
+          ? `<img src="${escapeHtml(img)}" data-full="${escapeHtml(img)}" data-lightbox data-product-peek data-sku="${escapeHtml(sku)}" data-product-name="${escapeHtml(copy.name)}" data-summary="${escapeHtml((copy.summary || "").slice(0, 220))}" data-product-path="${escapeHtml(path)}" data-apps="${escapeHtml(apps)}" alt="${escapeHtml(copy.name)}" loading="lazy"/>`
+          : ""
+      }</div>
       <div class="body">
-        <div class="model">${escapeHtml(displaySku(p))}</div>
+        <div class="model">${escapeHtml(sku)}</div>
         <h3>${escapeHtml(copy.name)}</h3>
         <p>${escapeHtml((copy.summary || "").slice(0, 100))}</p>
       </div>
@@ -294,6 +306,7 @@ function catalogCards(products: any[], lang: string) {
       summary: copy.summary || "",
       image: imgSrc ? cdnUrl(imgSrc) : "",
       path: productPath(lang, p.slug),
+      apps: (copy.applications || []).slice(0, 8).join("|"),
     };
   });
 }
@@ -374,12 +387,31 @@ Allow: /
 User-agent: Google-InspectionTool
 Allow: /
 
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
 User-agent: *
 Allow: /
 Allow: /llms.txt
 Allow: /a2a/
 Allow: /.well-known/agent.json
 Allow: /.well-known/ai-plugin.json
+Allow: /.well-known/indexnow.txt
 Disallow: /api/v1/leads
 Disallow: /sku-pool
 Sitemap: https://circuitbull.com/sitemap.xml
@@ -391,6 +423,32 @@ Sitemap: https://circuitbull.com/sitemap-solutions.xml
     { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=300" }
   )
 );
+
+const INDEXNOW_KEY = "cbidx7f3e91a2d64c8b9e1f0a4d6c8b2e19";
+
+function indexNowKey(env?: Env) {
+  return String(env?.INDEXNOW_KEY || INDEXNOW_KEY).trim();
+}
+
+function indexNowResponse(key: string) {
+  return new Response(key, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
+
+function indexNowPathMatch(pathname: string, key: string) {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return path === `/${key}.txt` || path === "/.well-known/indexnow.txt" || path === "/indexnow.txt";
+}
+
+app.on(["GET", "HEAD"], `/${INDEXNOW_KEY}.txt`, (c) => indexNowResponse(indexNowKey(c.env)));
+app.on(["GET", "HEAD"], `/${INDEXNOW_KEY}.txt/`, (c) => indexNowResponse(indexNowKey(c.env)));
+app.on(["GET", "HEAD"], "/.well-known/indexnow.txt", (c) => indexNowResponse(indexNowKey(c.env)));
+app.on(["GET", "HEAD"], "/indexnow.txt", (c) => indexNowResponse(indexNowKey(c.env)));
 
 const SITEMAP_NS = `xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml"`;
 const xmlHeaders = {
@@ -425,13 +483,14 @@ ${body}
 }
 
 function sitemapPagesXml() {
+  const lastmod = new Date().toISOString().slice(0, 10);
   const urls = [
     sitemapUrl(absoluteUrl(homePath("en")), "1.0", homePath),
     sitemapUrl(absoluteUrl(catalogPath("en")), "0.9", catalogPath),
     sitemapUrl(absoluteUrl(solutionsIndexPath("en")), "0.85", solutionsIndexPath),
-    sitemapUrl(absoluteUrl(contactPath("en")), "0.6", contactPath),
-    sitemapUrl(absoluteUrl(partnersPath("en")), "0.6", partnersPath),
-    sitemapUrl(absoluteUrl(investPath("en")), "0.85", investPath),
+    sitemapUrl(absoluteUrl(contactPath("en")), "0.6", contactPath, lastmod),
+    sitemapUrl(absoluteUrl(partnersPath("en")), "0.6", partnersPath, lastmod),
+    sitemapUrl(absoluteUrl(investPath("en")), "0.85", investPath, lastmod),
     ...LEGAL_SLUGS.map((slug) =>
       sitemapUrl(absoluteUrl(legalPath("en", slug)), "0.4", (l) => legalPath(l, slug))
     ),
@@ -449,8 +508,9 @@ async function sitemapProductsXml(env: Env) {
     for (const p of products) {
       const slug = String(p?.slug || "").trim();
       if (!slug) continue;
-      urls.push(sitemapUrl(absoluteUrl(productPath("en", slug)), "0.8", (l) => productPath(l, slug)));
-      urls.push(sitemapUrl(absoluteUrl(datasheetPath("en", slug)), "0.55", (l) => datasheetPath(l, slug)));
+      const lastmod = p.updatedAt || p.datasheetStatus?.translatedAt;
+      urls.push(sitemapUrl(absoluteUrl(productPath("en", slug)), "0.8", (l) => productPath(l, slug), lastmod));
+      urls.push(sitemapUrl(absoluteUrl(datasheetPath("en", slug)), "0.55", (l) => datasheetPath(l, slug), lastmod));
     }
     return urlsetXml(urls);
   } catch {
@@ -466,11 +526,15 @@ async function sitemapSolutionsXml(env: Env) {
       if (n.catalog === false) continue;
       const slug = String(n?.slug || "").trim();
       if (!slug) continue;
-      urls.push(sitemapUrl(absoluteUrl(solutionPath("en", slug)), "0.75", (l) => solutionPath(l, slug)));
+      const lastmod = n.updatedAt;
+      urls.push(sitemapUrl(absoluteUrl(solutionPath("en", slug)), "0.75", (l) => solutionPath(l, slug), lastmod));
       for (const cap of listCapabilities(slug)) {
         urls.push(
-          sitemapUrl(absoluteUrl(capabilityPath("en", slug, cap.slug)), "0.65", (l) =>
-            capabilityPath(l, slug, cap.slug)
+          sitemapUrl(
+            absoluteUrl(capabilityPath("en", slug, cap.slug)),
+            "0.65",
+            (l) => capabilityPath(l, slug, cap.slug),
+            lastmod
           )
         );
       }
@@ -539,6 +603,10 @@ function llmsTxt(products: any[], needs: any[], lang = DEFAULT_LANG) {
     "## Invest / EPC+F",
     `- G2G launchpad: ${absoluteUrl(investPath(lang))}`,
     `- Direct briefing: ${absoluteUrl(contactPath(lang))}?interest=g2g`,
+    `- Ministry NDA session: ${absoluteUrl(contactPath(lang))}?interest=g2g-nda`,
+    `- Resource / commodity-backed offset: ${absoluteUrl(contactPath(lang))}?interest=offset-commodity`,
+    `- Oil-backed offset (e.g. Iraq): ${absoluteUrl(contactPath(lang))}?interest=offset-oil`,
+    `- Gold / mineral-backed offset (e.g. Africa): ${absoluteUrl(contactPath(lang))}?interest=offset-gold`,
     `- EPC+F financing: ${absoluteUrl(contactPath(lang))}?interest=epc-f`,
     "",
     "## API (ChatGPT / A2A)",
@@ -547,7 +615,18 @@ function llmsTxt(products: any[], needs: any[], lang = DEFAULT_LANG) {
     `- GET /a2a/v1/pages?lang=${lang}`,
     "- GET /a2a/v1/sku/{sku}?lang=",
     `- GET /a2a/v1/products/{slug}?lang=${lang}`,
-    "- GET /api/v1/search?mode=hybrid&group=lens&min=1000&max=1400",
+    "- GET /a2a/v1/search?q=thermal+border&lang=",
+    "- POST /a2a/v1/chat  {\"message\":\"nearest office Iraq\",\"lang\":\"en\",\"country\":\"IQ\"}",
+    "- GET /a2a/v1/office?country=IQ&city=Baghdad",
+    "- GET /a2a/v1/office?lat=55.57&lng=13.02  (nearest by GPS)",
+    "- GET /a2a/v1/office?country=NG  (Africa → HQ until regional office)",
+    "- GET /a2a/v1/funding  (EPC+F / G2G — apply URLs)",
+    "- GET /a2a/v1/desk?country=IQ  (ministry NDA + resource/commodity offset; oil/gold examples)",
+    "- GET /a2a/v1/apply?sku=Cb-000040&interest=quote",
+    "- GET /a2a/v1/apply?interest=g2g-nda",
+    "- GET /a2a/v1/apply?interest=authorized-seller",
+    "- POST /a2a/v1/whatsapp {\"whatsapp\":\"+9647501580509\",\"country\":\"IQ\"}",
+    "- POST /a2a  JSON-RPC message/send",
     "",
     `## Page SEO (${lang})`,
     `- Home: ${ui.home.seoTitle} — ${ui.home.seoDescription}`,
@@ -575,9 +654,186 @@ app.get("/:lang/llms.txt", async (c) => {
 /* ——— A2A / GPT Actions ——— */
 app.get("/.well-known/agent.json", (c) => c.json(agentCard()));
 app.get("/.well-known/ai-plugin.json", (c) => c.json(chatgptPlugin()));
+app.get("/.well-known/openai-apps.json", (c) =>
+  c.json({
+    schema_version: "v1",
+    name: "Circuitbull Catalog",
+    description: "Find Circuitbull® mission sensors by SKU, model, or operational need.",
+    openapi_url: `${SITE_ORIGIN}/a2a/openapi.json`,
+    logo_url: `${SITE_ORIGIN}/favicon.svg`,
+    contact_email: "info@circuitbull.com",
+  })
+);
+
 app.get("/a2a", (c) => c.json(agentCard()));
+app.post("/a2a", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const lang = normalizeLang(c.req.query("lang") || body?.params?.metadata?.lang || DEFAULT_LANG);
+  const out = await handleA2aJsonRpc(c.env, body, lang);
+  return c.json(out);
+});
 app.get("/a2a/agent.json", (c) => c.json(agentCard()));
 app.get("/a2a/openapi.json", (c) => c.json(openApiSpec()));
+
+app.get("/a2a/v1/search", async (c) => {
+  const q = (c.req.query("q") || "").trim();
+  const lang = normalizeLang(c.req.query("lang") || DEFAULT_LANG);
+  const limit = Math.min(24, Math.max(1, Number(c.req.query("limit") || 8)));
+  const found = await findCatalog(c.env, q, lang, limit);
+  const products = found.products.map((p) => ({
+    ...p,
+    url: absoluteUrl(p.path),
+  }));
+  return c.json({
+    protocol: "a2a",
+    brand: "Circuitbull®",
+    q: found.q,
+    lang,
+    source: found.source,
+    count: products.length,
+    products,
+    solutions: found.solutions,
+  });
+});
+
+app.post("/a2a/v1/chat", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const q = String(body.message || body.q || body.text || "").trim();
+  const lang = normalizeLang(body.lang || c.req.query("lang") || DEFAULT_LANG);
+  const limit = Math.min(24, Math.max(1, Number(body.limit || 8)));
+  const countryHeader = String(c.req.header("CF-IPCountry") || "").trim();
+  const countryBody = String(body.country || c.req.query("country") || "").trim();
+  const city = String(body.city || c.req.query("city") || "").trim();
+  const latRaw = body.lat ?? body.latitude ?? c.req.query("lat");
+  const lngRaw = body.lng ?? body.lon ?? body.longitude ?? c.req.query("lng");
+  const lat = latRaw != null && latRaw !== "" ? Number(latRaw) : undefined;
+  const lng = lngRaw != null && lngRaw !== "" ? Number(lngRaw) : undefined;
+  // CF-IPCountry only as soft "near me" hint — never override explicit place/continent in the message.
+  const out = await converse(c.env, q, lang, limit, {
+    country: countryBody || undefined,
+    city,
+    lat,
+    lng,
+    geoCountryHint: countryHeader || undefined,
+  });
+  const products = out.found.products.map((p) => ({ ...p, url: absoluteUrl(p.path) }));
+  const phone = String(body.whatsapp || body.phone || extractPhone(q) || "").trim();
+  const cc = (out.advice.place.country || countryBody || countryHeader).toUpperCase();
+  let ping: Awaited<ReturnType<typeof runWhatsAppPing>> | null = null;
+  if (phone && /^[A-Z]{2}$/.test(cc)) {
+    ping = await runWhatsAppPing(c.env, c.executionCtx, {
+      country: cc,
+      whatsapp: phone,
+      sku: out.advice.sku || String(body.sku || ""),
+      productName: String(body.productName || ""),
+      source: "a2a-chat",
+    });
+  }
+  let reply = out.reply;
+  if (ping?.ok) {
+    reply += ping.sent
+      ? `\nWhatsApp ping sent to +${ping.e164}.`
+      : `\nWhatsApp ready — tap: ${ping.waMe}`;
+  }
+  return c.json({
+    protocol: "a2a",
+    brand: "Circuitbull®",
+    lang,
+    query: q,
+    reply,
+    products,
+    solutions: out.found.solutions,
+    office: out.advice.office,
+    funding: out.advice.funding,
+    apply: out.advice.apply,
+    desk: out.advice.desk,
+    whatsapp: { ...out.advice.whatsapp, pingResult: ping },
+  });
+});
+
+app.get("/a2a/v1/office", async (c) => {
+  const lang = normalizeLang(c.req.query("lang") || DEFAULT_LANG);
+  const hasGpsQuery = c.req.query("lat") != null || c.req.query("lng") != null;
+  const country = (c.req.query("country") || (hasGpsQuery ? "" : c.req.header("CF-IPCountry") || "")).trim();
+  const city = (c.req.query("city") || "").trim();
+  const latRaw = c.req.query("lat");
+  const lngRaw = c.req.query("lng") || c.req.query("lon");
+  const lat = latRaw != null && latRaw !== "" ? Number(latRaw) : undefined;
+  const lng = lngRaw != null && lngRaw !== "" ? Number(lngRaw) : undefined;
+  const pack = await nearestOffice(c.env, { country, city, lat, lng });
+  return c.json({
+    protocol: "a2a",
+    brand: "Circuitbull®",
+    lang,
+    country: country.toUpperCase() || null,
+    city: city || null,
+    lat: Number.isFinite(lat as number) ? lat : null,
+    lng: Number.isFinite(lng as number) ? lng : null,
+    ...pack,
+    apply: applyLinks(lang, { interest: "quote" }),
+    whatsapp: whatsappOffer({ lang, officePhone: pack.office?.phone as string | undefined, country }),
+  });
+});
+
+app.get("/a2a/v1/funding", async (c) => {
+  const lang = normalizeLang(c.req.query("lang") || DEFAULT_LANG);
+  const funding = await fundingPrograms(c.env, lang);
+  return c.json({
+    protocol: "a2a",
+    brand: "Circuitbull®",
+    lang,
+    ...funding,
+    apply: applyLinks(lang, { interest: "epc-f" }),
+  });
+});
+
+app.get("/a2a/v1/desk", async (c) => {
+  const lang = normalizeLang(c.req.query("lang") || DEFAULT_LANG);
+  const country = (c.req.query("country") || c.req.header("CF-IPCountry") || "").trim();
+  const city = (c.req.query("city") || "").trim();
+  const desk = deskPack(lang, country);
+  const pack = await nearestOffice(c.env, country, city);
+  return c.json({
+    protocol: "a2a",
+    brand: "Circuitbull®",
+    lang,
+    country: country.toUpperCase() || null,
+    city: city || null,
+    desk,
+    office: pack,
+    apply: applyLinks(lang, { interest: desk.offset.interest || "g2g-nda" }),
+    whatsapp: whatsappOffer({ lang, officePhone: pack.office?.phone, country }),
+  });
+});
+
+app.get("/a2a/v1/apply", async (c) => {
+  const lang = normalizeLang(c.req.query("lang") || DEFAULT_LANG);
+  const sku = (c.req.query("sku") || "").trim();
+  const need = (c.req.query("need") || "").trim();
+  const interest = (c.req.query("interest") || "").trim();
+  return c.json({
+    protocol: "a2a",
+    brand: "Circuitbull®",
+    lang,
+    sku: sku || null,
+    need: need || null,
+    ...applyLinks(lang, { sku, need, interest }),
+  });
+});
+
+app.post("/a2a/v1/whatsapp", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const country = String(body.country || c.req.query("country") || c.req.header("CF-IPCountry") || "").trim().toUpperCase();
+  const ping = await runWhatsAppPing(c.env, c.executionCtx, {
+    country,
+    whatsapp: String(body.whatsapp || body.phone || ""),
+    sku: String(body.sku || ""),
+    productName: String(body.productName || body.product || ""),
+    source: "a2a-whatsapp",
+  });
+  if (!ping.ok) return c.json({ protocol: "a2a", brand: "Circuitbull®", ...ping }, ping.error === "country_required" || ping.error === "invalid_whatsapp" ? 400 : 400);
+  return c.json({ protocol: "a2a", brand: "Circuitbull®", ...ping }, ping.sent ? 201 : 202);
+});
 
 app.get("/a2a/v1/products", async (c) => {
   const lang = normalizeLang(c.req.query("lang") || DEFAULT_LANG);
@@ -1228,6 +1484,8 @@ type LeadInput = {
   product?: string;
   sku?: string;
   productName?: string;
+  inSector?: string;
+  hasCompany?: string;
 };
 
 const INTEREST_OPTIONS: { value: string; label: string }[] = [
@@ -1240,6 +1498,10 @@ const INTEREST_OPTIONS: { value: string; label: string }[] = [
   { value: "investment", label: "Project Investment / EPC+F" },
   { value: "epc-f", label: "EPC+F Financing" },
   { value: "g2g", label: "G2G Direct Briefing" },
+  { value: "g2g-nda", label: "Ministry NDA session" },
+  { value: "offset-commodity", label: "Resource / commodity-backed offset" },
+  { value: "offset-oil", label: "Oil-backed offset (e.g. Iraq)" },
+  { value: "offset-gold", label: "Gold / mineral-backed offset (e.g. Africa)" },
   { value: "authorized-seller", label: "Authorized seller / distributor" },
   { value: "other", label: "Other" },
 ];
@@ -1285,6 +1547,8 @@ async function notifyNewLead(env: Env, lead: Record<string, unknown>) {
     `Country: ${lead.country || "—"}`,
     `City: ${lead.city || "—"}`,
     `Interest: ${lead.interest || "—"}`,
+    lead.inSector ? `In sector: ${lead.inSector}` : "",
+    lead.hasCompany ? `Has company: ${lead.hasCompany}` : "",
     `Product: ${lead.productName || lead.product || "—"}`,
     `SKU: ${lead.sku || "—"}`,
     `Source: ${lead.source || "contact"}`,
@@ -1334,7 +1598,13 @@ app.post("/api/v1/leads", async (c) => {
 
   const name = (body.name || "").trim();
   const email = (body.email || "").trim().toLowerCase();
-  const message = (body.message || "").trim();
+  const inSector = (body.inSector || "").trim();
+  const hasCompany = (body.hasCompany || "").trim();
+  let message = (body.message || "").trim();
+  if (inSector || hasCompany) {
+    const qualify = [`inSector: ${inSector || "—"}`, `hasCompany: ${hasCompany || "—"}`].join("\n");
+    message = message ? `${qualify}\n\n${message}` : qualify;
+  }
   if (!name || !email || !message) {
     return c.json({ error: "name_email_message_required" }, 400);
   }
@@ -1357,6 +1627,8 @@ app.post("/api/v1/leads", async (c) => {
     sku: (body.sku || "").trim(),
     productName: (body.productName || "").trim(),
     message,
+    inSector,
+    hasCompany,
     source: (body.source || "contact").trim(),
     createdAt: new Date().toISOString(),
   };
@@ -1381,23 +1653,30 @@ app.post("/api/v1/leads", async (c) => {
   return c.json({ ok: true, id: lead.id, emailed, emailError }, emailed ? 201 : 202);
 });
 
-app.post("/api/v1/buy/whatsapp", async (c) => {
-  let body: LeadInput = {};
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "invalid_body" }, 400);
-  }
-  const country = String(body.country || "").trim().toUpperCase();
-  if (!/^[A-Z]{2}$/.test(country)) return c.json({ error: "country_required" }, 400);
-  const e164 = normalizeWhatsApp(country, String(body.whatsapp || body.phone || ""));
-  if (!e164) return c.json({ error: "invalid_whatsapp" }, 400);
+async function runWhatsAppPing(
+  env: Env,
+  executionCtx: ExecutionContext | undefined,
+  input: { country: string; whatsapp: string; sku?: string; productName?: string; source?: string }
+): Promise<{
+  ok: boolean;
+  error?: string;
+  e164?: string;
+  sent?: boolean;
+  waMe?: string;
+  seller?: string;
+  hqFallback?: boolean;
+  text?: string;
+}> {
+  const country = String(input.country || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(country)) return { ok: false, error: "country_required" };
+  const e164 = normalizeWhatsApp(country, input.whatsapp);
+  if (!e164) return { ok: false, error: "invalid_whatsapp" };
 
-  const sku = String(body.sku || "").trim();
-  const productName = String(body.productName || body.product || "").trim() || sku || "platform";
-  const { partners } = await loadPartners(c.env);
+  const sku = String(input.sku || "").trim();
+  const productName = String(input.productName || "").trim() || sku || "platform";
+  const { partners } = await loadPartners(env);
   const channel = buyChannelForCountry(partners, country);
-  const composed = await composeBuyWhatsApp(c.env, {
+  const composed = await composeBuyWhatsApp(env, {
     country,
     countryName: channel.seller.countryName,
     sku: sku || "SKU",
@@ -1406,7 +1685,7 @@ app.post("/api/v1/buy/whatsapp", async (c) => {
     sellerCity: channel.seller.city,
     hqFallback: channel.hqFallback,
   });
-  const waSettings = await loadWhatsAppSettings(c.env.DATA, c.env);
+  const waSettings = await loadWhatsAppSettings(env.DATA, env);
   const ping = await sendWhatsAppCloud(waSettings, e164, composed.text);
   const waMe = customerWaMe(e164, composed.text);
 
@@ -1426,7 +1705,7 @@ app.post("/api/v1/buy/whatsapp", async (c) => {
     sku,
     productName,
     message: composed.text,
-    source: "buy-whatsapp",
+    source: input.source || "buy-whatsapp",
     seller: channel.seller.name,
     hqFallback: channel.hqFallback,
     waSent: ping.sent,
@@ -1436,26 +1715,54 @@ app.post("/api/v1/buy/whatsapp", async (c) => {
     createdAt: new Date().toISOString(),
   };
 
-  await saveLead(c.env.DATA, lead);
-
-  const notify = notifyNewLead(c.env, lead).catch((e: any) => {
+  await saveLead(env.DATA, lead);
+  const notify = notifyNewLead(env, lead).catch((e: any) => {
     console.error("SES buy-whatsapp failed", e?.message || String(e));
   });
   try {
-    c.executionCtx.waitUntil(notify);
+    if (executionCtx) executionCtx.waitUntil(notify);
+    else await notify;
   } catch {
     await notify;
   }
 
+  return {
+    ok: true,
+    e164,
+    sent: ping.sent,
+    waMe,
+    seller: channel.seller.name,
+    hqFallback: channel.hqFallback,
+    text: composed.text,
+  };
+}
+
+app.post("/api/v1/buy/whatsapp", async (c) => {
+  let body: LeadInput = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, 400);
+  }
+  const ping = await runWhatsAppPing(c.env, c.executionCtx, {
+    country: String(body.country || ""),
+    whatsapp: String(body.whatsapp || body.phone || ""),
+    sku: String(body.sku || ""),
+    productName: String(body.productName || body.product || ""),
+    source: "buy-whatsapp",
+  });
+  if (!ping.ok) return c.json({ error: ping.error }, 400);
   return c.json(
     {
       ok: true,
       pinged: true,
-      e164,
-      seller: channel.seller.name,
-      hqFallback: channel.hqFallback,
+      e164: ping.e164,
+      seller: ping.seller,
+      hqFallback: ping.hqFallback,
+      waMe: ping.waMe,
+      sent: ping.sent,
     },
-    201
+    ping.sent ? 201 : 202
   );
 });
 
@@ -1591,7 +1898,14 @@ async function renderContact(c: any, lang: string) {
   const contactHref = contactPath(lang);
   const { country } = resolveLocale(c, lang);
   persistLocaleCookies(c, lang, country);
-  const diplomatic = interestQ === "g2g" || interestQ === "epc-f" || interestQ === "investment";
+  const diplomatic =
+    interestQ === "g2g" ||
+    interestQ === "epc-f" ||
+    interestQ === "investment" ||
+    interestQ === "g2g-nda" ||
+    interestQ === "offset-commodity" ||
+    interestQ === "offset-oil" ||
+    interestQ === "offset-gold";
 
   const mapsQuery = "1207 Delaware Ave #5352, Wilmington, DE 19806";
   const mapsEmbed =
@@ -1652,7 +1966,8 @@ async function renderContact(c: any, lang: string) {
         <address>
           Volls Global Inc<br/>
           1207 Delaware Ave #5352<br/>
-          Wilmington, DE 19806
+          Wilmington, DE 19806<br/>
+          United States of America
         </address>
         <p>Circuitbull® · Wilmington, DE</p>
         <div class="cta-row">
@@ -1924,10 +2239,62 @@ app.get("/:lang/products", async (c) => {
 
 async function renderProductCatalog(c: any, lang: string) {
   const ui = pageCopy(lang);
+  const dock = catalogDock(lang);
   const products = (await kvJson<any[]>(c.env.DATA, "products")) || [];
+  const needs = ((await kvJson<any[]>(c.env.DATA, "needs")) || []).filter((n) => n && n.slug);
+  const needTitle = new Map<string, string>();
+  const needSearch = new Map<string, string>();
+  const dockByLang = new Map(SITE_LOCALES.map((loc) => [loc, catalogDock(loc)]));
+  for (const n of needs) {
+    const slug = String(n.slug);
+    needTitle.set(slug, solutionCopy(n, lang).title || slug);
+    const titles = SITE_LOCALES.map((loc) => solutionCopy(n, loc).title).filter(Boolean);
+    needSearch.set(slug, [...new Set(titles)].join(" "));
+  }
+
+  const catLabels = new Map<string, string>();
+  const usedNeeds = new Set<string>();
   const cards = products.map((p) => {
     const copy = productCopy(p, lang);
     const imgSrc = p.media?.aiHero || p.image;
+    const cats: string[] = [];
+    for (const raw of productCategoryLabels(p)) {
+      const key = categoryKey(raw);
+      if (!key || cats.includes(key)) continue;
+      cats.push(key);
+      if (!catLabels.has(key)) catLabels.set(key, dock.categories[key] || raw);
+    }
+    const needSlugs = [
+      ...new Set(
+        (p.needSlugs || []).map((slug: string) => String(slug || "").trim()).filter(Boolean)
+      ),
+    ];
+    for (const slug of needSlugs) usedNeeds.add(slug);
+    const i18n = p.i18n && typeof p.i18n === "object" ? p.i18n : {};
+    const localized: string[] = [];
+    for (const loc of SITE_LOCALES) {
+      const block = i18n[loc] || {};
+      localized.push(block.name, block.summary, block.slogan);
+      if (block.description) localized.push(String(block.description).slice(0, 280));
+      if (Array.isArray(block.applications)) localized.push(...block.applications);
+      for (const key of cats) localized.push(dockByLang.get(loc)?.categories[key] || "");
+    }
+    const q = foldSearch(
+      [
+        copy.name,
+        copy.summary,
+        displaySku(p),
+        p.slug,
+        p.model,
+        p.name,
+        p.summary,
+        ...productCategoryLabels(p),
+        ...localized,
+        ...needSlugs.map((slug) => needSearch.get(slug) || needTitle.get(slug) || slug),
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
     return {
       slug: p.slug,
       smartId: displaySku(p),
@@ -1936,8 +2303,24 @@ async function renderProductCatalog(c: any, lang: string) {
       summary: copy.summary || "",
       image: imgSrc ? cdnUrl(imgSrc) : "",
       path: productPath(lang, p.slug),
+      cats: cats.join("|"),
+      needs: needSlugs.join("|"),
+      apps: (copy.applications || []).slice(0, 8).join("|"),
+      areas: needSlugs
+        .map((slug) => needTitle.get(slug) || "")
+        .filter(Boolean)
+        .slice(0, 6)
+        .join("|"),
+      q,
     };
   });
+
+  const categories = [...catLabels.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, lang));
+  const solutions = [...usedNeeds]
+    .map((slug) => ({ value: slug, label: needTitle.get(slug) || slug }))
+    .sort((a, b) => a.label.localeCompare(b.label, lang));
 
   const body = `
 <section class="section section-flush">
@@ -1947,6 +2330,7 @@ async function renderProductCatalog(c: any, lang: string) {
       <h2>${escapeHtml(ui.catalog.title)}</h2>
       <p>${escapeHtml(fillCount(ui.catalog.lead, products.length))}</p>
     </div>
+    ${flyDockMarkup({ copy: dock, categories, solutions })}
     ${smartFilterMarkup({ lang, factCount: 0, groups: [] }, cards, lang, { lazyFacets: true })}
   </div>
 </section>`;
@@ -2180,7 +2564,7 @@ async function renderProductDetail(c: any, lang: string, slug: string) {
       ${p.model ? `<p style="font-family:var(--font-mono);font-size:.9rem;color:var(--accent);margin:0 0 .75rem">Model ${escapeHtml(p.model)}</p>` : ""}
       <p class="page-lead">${escapeHtml(copy.slogan || copy.summary || copy.description || "")}</p>
       <div class="cta-row">
-        <button type="button" class="btn btn-primary" data-open-buy>${escapeHtml(chrome.buy)}</button>
+        <button type="button" class="btn btn-primary" data-open-buy data-sku="${escapeHtml(displaySku(p))}" data-product-name="${escapeHtml(copy.name)}" data-product-path="${escapeHtml(productPath(lang, p.slug))}" data-product-image="${escapeHtml(hero || "")}">${escapeHtml(chrome.buy)}</button>
         <a class="btn btn-ghost" href="${escapeHtml(quoteHref)}">${escapeHtml(chrome.quote)}</a>
         <a class="btn btn-ghost" href="${escapeHtml(datasheetHref)}">${escapeHtml(chrome.datasheet)}</a>
         <a class="btn btn-ghost" href="${escapeHtml(datasheetPdfHref)}" download="${escapeHtml(pdfDlName)}.pdf">${escapeHtml(chrome.pdf)}</a>
@@ -2247,6 +2631,8 @@ ${buyCtaMarkup({
   quoteHref,
   sku: displaySku(p),
   productName: copy.name,
+  path: productPath(lang, p.slug),
+  image: hero || "",
 })}
 `;
 
@@ -2901,7 +3287,14 @@ app.onError((err, c) => {
 });
 
 export default {
-  fetch: app.fetch,
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const pathname = new URL(request.url).pathname;
+    const key = indexNowKey(env);
+    if ((request.method === "GET" || request.method === "HEAD") && indexNowPathMatch(pathname, key)) {
+      return indexNowResponse(key);
+    }
+    return app.fetch(request, env, ctx);
+  },
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       runFacebookSlot(env, { source: "cron", at: controller.scheduledTime }).then((r) => {

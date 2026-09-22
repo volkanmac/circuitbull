@@ -106,9 +106,15 @@ export function xhtmlLinks(pathForLang: (lang: string) => string) {
   return lines.join("\n");
 }
 
-export function sitemapUrl(loc: string, priority: string, pathForLang?: (lang: string) => string) {
+export function sitemapUrl(
+  loc: string,
+  priority: string,
+  pathForLang?: (lang: string) => string,
+  lastmod?: string
+) {
   const extra = pathForLang ? `\n${xhtmlLinks(pathForLang)}` : "";
-  return `  <url>\n    <loc>${xmlEscape(loc)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>${extra}\n  </url>`;
+  const lm = lastmod ? `\n    <lastmod>${xmlEscape(String(lastmod).slice(0, 10))}</lastmod>` : "";
+  return `  <url>\n    <loc>${xmlEscape(loc)}</loc>${lm}\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>${extra}\n  </url>`;
 }
 
 export function staticPathFns() {

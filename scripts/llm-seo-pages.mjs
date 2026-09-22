@@ -88,8 +88,16 @@ function productPayload(p, lang = DEFAULT_LOCALE) {
   const ds = p.datasheet?.i18n?.[lang] || p.datasheet?.i18n?.en || p.datasheet || {};
   const specs = ds.specs || p.specs || {};
   const specPairs = Object.entries(specs)
-    .slice(0, 12)
+    .slice(0, 24)
     .map(([k, v]) => `${k}: ${v}`);
+  const facts = (Array.isArray(p.facts) ? p.facts : [])
+    .slice(0, 14)
+    .map((f) => {
+      const k = f.label || f.propertyKey || f.groupKey || "";
+      const v = f.value;
+      return k && v != null ? `${k}: ${v}` : "";
+    })
+    .filter(Boolean);
   return {
     slug: p.slug,
     sku: p.sku || p.smartId || "",
@@ -102,6 +110,7 @@ function productPayload(p, lang = DEFAULT_LOCALE) {
     needSlugs: p.needSlugs || [],
     benefits: (loc.benefits?.length ? loc.benefits : en.benefits || p.benefits || []).slice(0, 6),
     specs: specPairs,
+    facts,
   };
 }
 
@@ -180,6 +189,7 @@ Rules:
 - Write IN ${meta.name}. Do not leave English for a non-en locale.
 - seoDescription is the <meta name="description"> snippet (short).
 - description is the on-page Description block (longer than meta).
+- Ground copy in the specs and facts JSON (range, detector, PTZ, IP rating). Do not invent numbers.
 - Keep SKU, model numbers, PTZ, EO/IR, LWIR, IP66 untranslated.
 - Brand is Circuitbull®. Do not invent other manufacturers.
 - Cameras are catalog sensors, not Made in USA.`,
@@ -269,7 +279,7 @@ const db = client.db(process.env.MONGODB_DB || "circuitbull");
 const stats = { products: 0, productsTouched: 0, solutions: 0, solutionsTouched: 0, failed: 0 };
 
 if (ONLY === "all" || ONLY === "solutions") {
-  const needFilter = ONLY_SLUG ? { slug: ONLY_SLUG } : { slug: { $in: [...SOLUTION_SLUGS] } };
+  const needFilter = ONLY_SLUG ? { slug: ONLY_SLUG } : {};
   const needs = await db.collection("needs").find(needFilter).toArray();
   const slugs = (needs.length ? needs.map((n) => n.slug) : ONLY_SLUG ? [ONLY_SLUG] : SOLUTION_SLUGS).filter(Boolean);
   for (const slug of slugs) {

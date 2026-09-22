@@ -33,6 +33,16 @@ export type CatalogCard = {
   summary: string;
   image: string;
   path: string;
+  /** Pipe-separated category keys for the products flying dock. */
+  cats?: string;
+  /** Pipe-separated solution slugs for the products flying dock. */
+  needs?: string;
+  /** Pipe-separated application / use-area labels for product peek. */
+  apps?: string;
+  /** Pipe-separated need/area titles for product peek. */
+  areas?: string;
+  /** Lowercase search blob for the products flying dock. */
+  q?: string;
 };
 
 function titleCaseKey(key: string) {
@@ -43,6 +53,17 @@ function titleCaseKey(key: string) {
 
 function cardSku(p: CatalogCard) {
   return p.sku || p.smartId || "SKU";
+}
+
+function peekImgAttrs(p: CatalogCard) {
+  if (!p.image) return "";
+  return (
+    `src="${escapeHtml(p.image)}" data-full="${escapeHtml(p.image)}" data-lightbox data-product-peek ` +
+    `data-sku="${escapeHtml(cardSku(p))}" data-product-name="${escapeHtml(p.name)}" ` +
+    `data-summary="${escapeHtml((p.summary || "").slice(0, 220))}" data-product-path="${escapeHtml(p.path)}" ` +
+    `data-apps="${escapeHtml(p.apps || "")}" data-areas="${escapeHtml(p.areas || "")}" ` +
+    `alt="${escapeHtml(p.name)}" loading="lazy"`
+  );
 }
 
 /** Render ontology-driven Spotify-style filter + product grid */
@@ -94,8 +115,8 @@ export function smartFilterMarkup(
 
   const cardHtml = cards
     .map(
-      (p) => `<a class="product" href="${escapeHtml(p.path)}" data-slug="${escapeHtml(p.slug)}">
-      <div class="media">${p.image ? `<img src="${escapeHtml(p.image)}" data-full="${escapeHtml(p.image)}" data-lightbox alt="${escapeHtml(p.name)}" loading="lazy"/>` : ""}</div>
+      (p) => `<a class="product" href="${escapeHtml(p.path)}" data-slug="${escapeHtml(p.slug)}" data-cats="${escapeHtml(p.cats || "")}" data-needs="${escapeHtml(p.needs || "")}" data-q="${escapeHtml(p.q || "")}">
+      <div class="media">${p.image ? `<img ${peekImgAttrs(p)}/>` : ""}</div>
       <div class="body">
         <div class="model">${escapeHtml(cardSku(p))}</div>
         <h3>${escapeHtml(p.name)}</h3>
@@ -215,10 +236,20 @@ function smartFilterScript() {
     return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function skuOf(p){ return p.sku||p.smartId||'SKU'; }
+  function peekAttrs(p){
+    var src=bySlug[p.slug]||p;
+    if(!p.image) return '';
+    return 'src="'+esc(p.image)+'" data-full="'+esc(p.image)+'" data-lightbox data-product-peek '+
+      'data-sku="'+esc(skuOf(p))+'" data-product-name="'+esc(p.name)+'" '+
+      'data-summary="'+esc((p.summary||'').slice(0,220))+'" data-product-path="'+esc(p.path)+'" '+
+      'data-apps="'+esc(src.apps||p.apps||'')+'" data-areas="'+esc(src.areas||p.areas||'')+'" '+
+      'alt="'+esc(p.name)+'" loading="lazy"';
+  }
 
   function cardHtml(p){
-    return '<a class="product" href="'+esc(p.path)+'" data-slug="'+esc(p.slug)+'">'+
-      '<div class="media">'+(p.image?'<img src="'+esc(p.image)+'" data-full="'+esc(p.image)+'" data-lightbox alt="'+esc(p.name)+'" loading="lazy"/>':'')+'</div>'+
+    var src=bySlug[p.slug]||p;
+    return '<a class="product" href="'+esc(p.path)+'" data-slug="'+esc(p.slug)+'" data-cats="'+esc(src.cats||'')+'" data-needs="'+esc(src.needs||'')+'" data-q="'+esc(src.q||'')+'">'+
+      '<div class="media">'+(p.image?'<img '+peekAttrs(p)+'/>':'')+'</div>'+
       '<div class="body"><div class="model">'+esc(skuOf(p))+'</div>'+
       '<h3>'+esc(p.name)+'</h3><p>'+esc((p.summary||'').slice(0,140))+'</p></div></a>';
   }
@@ -259,6 +290,7 @@ function smartFilterScript() {
     }
     if(clearBtn) clearBtn.hidden=!state.active;
     setListFold(true, shown);
+    document.dispatchEvent(new CustomEvent('cb-catalog-rendered'));
   }
 
   function renderLiveLists(list, label){

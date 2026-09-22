@@ -21,6 +21,7 @@
     "llm-clean": "node scripts/llm-clean-datasheets.mjs",
     "llm-translate": "node scripts/llm-translate-products.mjs",
     "llm-seo": "node scripts/llm-seo-pages.mjs",
+    "submit-sitemap": "node scripts/submit-sitemap.mjs",
     "generate-datasheet-pdfs": "node scripts/generate-datasheet-pdfs.mjs",
     "llm-parse-facts": "node scripts/llm-parse-facts.mjs",
     "llm-classify-solutions": "node scripts/llm-classify-solutions.mjs",

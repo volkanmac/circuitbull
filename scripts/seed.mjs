@@ -42,6 +42,13 @@ const company = {
   updatedAt: new Date(),
 };
 
+/**
+ * geo.source:
+ * - street: Nominatim hit on street / building
+ * - neighborhood: district / mahalle level (no exact street pin)
+ * - city_centroid: street string not in OSM; city center used
+ * - country_centroid: pipeline / no city — capital / country pin only
+ */
 const partners = [
   {
     _id: "partner:us-hq",
@@ -54,6 +61,12 @@ const partners = [
     email: "info@circuitbull.com",
     city: "Wilmington",
     address: company.address,
+    geo: {
+      lat: 39.7537808,
+      lng: -75.5574801,
+      formatted: "1207 Delaware Ave, Wilmington, DE 19806, USA",
+      source: "street",
+    },
     status: "active",
     labels: ["HQ", "US HQ"],
   },
@@ -74,6 +87,12 @@ const partners = [
       district: "Çankaya",
       country: "TR",
       countryName: "Turkey",
+    },
+    geo: {
+      lat: 39.9110644,
+      lng: 32.8127822,
+      formatted: "Next Level, Kızılırmak Mah., Çankaya, Ankara, Türkiye",
+      source: "street",
     },
     activities: [
       "Security systems",
@@ -100,6 +119,13 @@ const partners = [
       country: "IQ",
       countryName: "Iraq",
     },
+    // Wavey Avenue B 17 not in OSM — Erbil city centroid
+    geo: {
+      lat: 36.1911744,
+      lng: 44.0094145,
+      formatted: "Erbil, Kurdistan Region, Iraq (city centroid; Wavey Avenue B 17 not geocoded)",
+      source: "city_centroid",
+    },
     activities: ["IT services", "Security systems", "Electronic solutions"],
     status: "active",
     labels: ["Authorized Seller", "Erbil"],
@@ -120,9 +146,53 @@ const partners = [
       country: "IQ",
       countryName: "Iraq",
     },
+    geo: {
+      lat: 33.3047065,
+      lng: 44.3413213,
+      formatted: "Al Yarmouk, Baghdad, Iraq",
+      source: "neighborhood",
+    },
     activities: ["Import / export", "Security systems", "Electronic solutions"],
     status: "active",
     labels: ["Authorized Seller", "Baghdad"],
+  },
+  {
+    _id: "partner:se-volls-technology",
+    type: "partner",
+    role: "authorized_distributor",
+    name: "Volls Technology Sweden AB",
+    country: "SE",
+    countryName: "Sweden",
+    city: "Malmö",
+    phone: null,
+    email: "info@volls.se",
+    address: {
+      line1: "Rödkullastigen 5 A Lgh 1601",
+      city: "Malmö",
+      postalCode: "21457",
+      country: "SE",
+      countryName: "Sweden",
+    },
+    geo: {
+      lat: 55.5753797,
+      lng: 13.0183382,
+      formatted: "Rödkullastigen 5a, 214 57 Malmö, Sweden",
+      source: "street",
+    },
+    activities: [
+      "EU authorized office",
+      "F-skatt registered",
+      "Moms registered",
+      "Arbetsgivare registered",
+    ],
+    status: "active",
+    labels: [
+      "Authorized Distributor",
+      "EU Hub",
+      "Aktiebolag",
+      "Org.nr 559198-2706",
+      "Est. 2019",
+    ],
   },
   {
     _id: "partner:sa-sales",
@@ -134,6 +204,12 @@ const partners = [
     city: null,
     phone: null,
     email: "me@circuitbull.com",
+    geo: {
+      lat: 24.7136,
+      lng: 46.6753,
+      formatted: "Riyadh, Saudi Arabia (country centroid — pipeline, no street address)",
+      source: "country_centroid",
+    },
     status: "pipeline",
     labels: ["Authorized Sales", "Enterprise"],
   },
@@ -147,6 +223,12 @@ const partners = [
     city: null,
     phone: null,
     email: "eu@circuitbull.com",
+    geo: {
+      lat: 52.52,
+      lng: 13.405,
+      formatted: "Berlin, Germany (country centroid — pipeline; EU live office is Malmö SE)",
+      source: "country_centroid",
+    },
     status: "pipeline",
     labels: ["Authorized Distributor"],
   },

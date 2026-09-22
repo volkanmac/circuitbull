@@ -35,6 +35,7 @@ SES_HOST = "email-smtp.eu-central-1.amazonaws.com"
 SES_PORT = "465"
 SES_FROM = "volkan@volls.us"
 SES_NOTIFY_TO = "volkan@volls.us"
+INDEXNOW_KEY = "cbidx7f3e91a2d64c8b9e1f0a4d6c8b2e19"
 
 # Facebook Page cron (UTC): 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00
 [triggers]

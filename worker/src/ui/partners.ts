@@ -4,6 +4,14 @@ import { SELECTOR_COUNTRIES, contactPath, partnersPath } from "../i18n/locales";
 import { pageCopy } from "../i18n/page-copy";
 import { escapeHtml } from "./shell";
 
+export type PartnerGeo = {
+  lat: number;
+  lng: number;
+  formatted?: string;
+  /** street | neighborhood | city_centroid | country_centroid */
+  source?: string;
+};
+
 export type PartnerRecord = {
   _id?: string;
   name: string;
@@ -23,10 +31,122 @@ export type PartnerRecord = {
     country?: string;
     countryName?: string;
   } | null;
+  geo?: PartnerGeo | null;
   activities?: string[];
   labels?: string[];
   status?: string;
 };
+
+/** EU-27 ISO codes — markets covered by Sweden authorized office when no local seller. */
+export const EU_HUB_COUNTRIES = new Set([
+  "AT",
+  "BE",
+  "BG",
+  "HR",
+  "CY",
+  "CZ",
+  "DK",
+  "EE",
+  "FI",
+  "FR",
+  "DE",
+  "GR",
+  "HU",
+  "IE",
+  "IT",
+  "LV",
+  "LT",
+  "LU",
+  "MT",
+  "NL",
+  "PL",
+  "PT",
+  "RO",
+  "SK",
+  "SI",
+  "ES",
+  "SE",
+]);
+
+/**
+ * African ISO codes for continent routing (no local Africa hub yet → HQ).
+ * Local-language copy slots can key off continent "AF" later.
+ */
+export const AFRICA_COUNTRIES = new Set([
+  "DZ",
+  "AO",
+  "BJ",
+  "BW",
+  "BF",
+  "BI",
+  "CM",
+  "CV",
+  "CF",
+  "TD",
+  "KM",
+  "CG",
+  "CD",
+  "CI",
+  "DJ",
+  "EG",
+  "GQ",
+  "ER",
+  "SZ",
+  "ET",
+  "GA",
+  "GM",
+  "GH",
+  "GN",
+  "GW",
+  "KE",
+  "LS",
+  "LR",
+  "LY",
+  "MG",
+  "MW",
+  "ML",
+  "MR",
+  "MU",
+  "MA",
+  "MZ",
+  "NA",
+  "NE",
+  "NG",
+  "RW",
+  "ST",
+  "SN",
+  "SC",
+  "SL",
+  "SO",
+  "ZA",
+  "SS",
+  "SD",
+  "TZ",
+  "TG",
+  "TN",
+  "UG",
+  "ZM",
+  "ZW",
+]);
+
+export type ContinentCode = "AF" | "EU" | "AS" | "NA" | "SA" | "OC" | "ME" | null;
+
+export function continentForCountry(country?: string | null): ContinentCode {
+  const cc = String(country || "").trim().toUpperCase();
+  if (!cc) return null;
+  if (EU_HUB_COUNTRIES.has(cc) || cc === "GB" || cc === "CH" || cc === "NO" || cc === "IS" || cc === "XK" || cc === "BA" || cc === "RS" || cc === "ME" || cc === "AL" || cc === "MK" || cc === "MD" || cc === "UA" || cc === "BY") {
+    return "EU";
+  }
+  if (AFRICA_COUNTRIES.has(cc)) return "AF";
+  if (["US", "CA", "MX"].includes(cc)) return "NA";
+  if (["BR", "AR", "CL", "CO", "PE", "VE", "UY", "PY", "BO", "EC", "GY", "SR"].includes(cc)) return "SA";
+  if (["AU", "NZ", "FJ", "PG"].includes(cc)) return "OC";
+  if (["SA", "AE", "QA", "KW", "BH", "OM", "YE", "JO", "LB", "SY", "IQ", "IR", "IL", "PS"].includes(cc)) return "ME";
+  if (["TR", "CN", "TW", "HK", "KR", "JP", "IN", "PK", "BD", "ID", "MY", "SG", "TH", "VN", "PH", "RU"].includes(cc)) {
+    return "AS";
+  }
+  return null;
+}
 
 export function isAppointedReseller(p: { role?: string; status?: string } | null | undefined) {
   if (!p) return false;
@@ -35,31 +155,107 @@ export function isAppointedReseller(p: { role?: string; status?: string } | null
   return true;
 }
 
+export function isEuHubCountry(country?: string | null) {
+  return EU_HUB_COUNTRIES.has(String(country || "").trim().toUpperCase());
+}
+
+export function isAfricaCountry(country?: string | null) {
+  return AFRICA_COUNTRIES.has(String(country || "").trim().toUpperCase());
+}
+
 export function headquartersPartner(partners: PartnerRecord[]) {
   return (partners || []).find((p) => p.role === "headquarters") || null;
 }
 
-/** Country/city filter: appointed local sellers, otherwise Global HQ. */
+export function euHubPartner(partners: PartnerRecord[]) {
+  return (
+    (partners || []).find((p) => String(p.country || "").toUpperCase() === "SE" && isAppointedReseller(p)) || null
+  );
+}
+
+export function partnerGeo(p: PartnerRecord | null | undefined): PartnerGeo | null {
+  if (!p?.geo) return null;
+  const lat = Number(p.geo.lat);
+  const lng = Number(p.geo.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { ...p.geo, lat, lng };
+}
+
+/** Haversine distance in km. */
+export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Nearest appointed office by GPS among partners with geo; HQ always included as candidate.
+ * Returns sorted by distanceKm ascending.
+ */
+export function nearestPartnersByGeo(
+  partners: PartnerRecord[],
+  lat: number,
+  lng: number
+): { partner: PartnerRecord; distanceKm: number }[] {
+  const origin = { lat, lng };
+  const hq = headquartersPartner(partners);
+  const candidates = [
+    ...partners.filter((p) => isAppointedReseller(p) && partnerGeo(p)),
+    ...(hq && partnerGeo(hq) ? [hq] : []),
+  ];
+  const seen = new Set<string>();
+  const scored: { partner: PartnerRecord; distanceKm: number }[] = [];
+  for (const p of candidates) {
+    const id = p._id || `${p.name}:${p.country}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const g = partnerGeo(p);
+    if (!g) continue;
+    scored.push({ partner: p, distanceKm: Math.round(haversineKm(origin, g) * 10) / 10 });
+  }
+  return scored.sort((a, b) => a.distanceKm - b.distanceKm);
+}
+
+/** Country/city filter: local appointed → EU SE hub → Africa HQ → Global HQ. */
 export function partnersForMarket(
   partners: PartnerRecord[],
   country?: string,
   city?: string
-): { partners: PartnerRecord[]; hqFallback: boolean } {
+): { partners: PartnerRecord[]; hqFallback: boolean; continent: ContinentCode; continentHub?: string | null } {
   const list = partners || [];
   const cc = String(country || "").trim().toUpperCase();
   const needle = String(city || "").trim().toLowerCase();
-  if (!cc) return { partners: list, hqFallback: false };
+  const continent = continentForCountry(cc);
+  if (!cc) return { partners: list, hqFallback: false, continent: null };
 
   const local = list.filter((p) => String(p.country || "").toUpperCase() === cc && isAppointedReseller(p));
   if (local.length) {
-    if (!needle) return { partners: local, hqFallback: false };
+    if (!needle) return { partners: local, hqFallback: false, continent };
+    const cityHits = local.filter((p) => String(p.city || p.address?.city || "").toLowerCase() === needle);
     return {
-      partners: local.filter((p) => String(p.city || p.address?.city || "").toLowerCase() === needle),
+      partners: cityHits.length ? cityHits : local,
       hqFallback: false,
+      continent,
     };
   }
+  if (isEuHubCountry(cc) || continent === "EU") {
+    const se = euHubPartner(list);
+    if (se) return { partners: [se], hqFallback: false, continent: "EU", continentHub: "SE" };
+  }
+  // Africa: no appointed hub yet — structure returns continent AF + HQ for later local-language copy.
   const hq = headquartersPartner(list);
-  return { partners: hq ? [hq] : [], hqFallback: Boolean(hq) };
+  return {
+    partners: hq ? [hq] : [],
+    hqFallback: Boolean(hq),
+    continent,
+    continentHub: continent === "AF" ? null : continent === "EU" ? "SE" : null,
+  };
 }
 
 function roleLabel(role?: string) {
@@ -114,6 +310,9 @@ export function partnersPageBody(opts: { partners: PartnerRecord[]; sent?: boole
     city: p.city || p.address?.city || "",
     role: p.role || "partner",
     status: p.status || "active",
+    geo: p.geo && Number.isFinite(Number(p.geo.lat)) && Number.isFinite(Number(p.geo.lng))
+      ? { lat: Number(p.geo.lat), lng: Number(p.geo.lng), source: p.geo.source || null }
+      : null,
   }));
 
   return `
@@ -169,6 +368,20 @@ export function partnersPageBody(opts: { partners: PartnerRecord[]; sent?: boole
         </label>
         <label>${escapeHtml(t.city)}<input name="city" autocomplete="address-level2"/></label>
       </div>
+      <fieldset class="form-bool">
+        <legend>${escapeHtml(t.inSector)}</legend>
+        <div class="form-bool-opts">
+          <label><input type="radio" name="inSector" value="yes" required/> ${escapeHtml(t.qualifyYes)}</label>
+          <label><input type="radio" name="inSector" value="no"/> ${escapeHtml(t.qualifyNo)}</label>
+        </div>
+      </fieldset>
+      <fieldset class="form-bool">
+        <legend>${escapeHtml(t.hasCompany)}</legend>
+        <div class="form-bool-opts">
+          <label><input type="radio" name="hasCompany" value="yes" required/> ${escapeHtml(t.qualifyYes)}</label>
+          <label><input type="radio" name="hasCompany" value="no"/> ${escapeHtml(t.qualifyNo)}</label>
+        </div>
+      </fieldset>
       <label>${escapeHtml(t.coverage)}
         <textarea name="message" rows="6" required></textarea>
       </label>
@@ -192,6 +405,7 @@ export function partnersPageBody(opts: { partners: PartnerRecord[]; sent?: boole
   try { meta=JSON.parse(bootEl&&bootEl.textContent||'[]'); } catch(e){}
   var cards=grid?Array.prototype.slice.call(grid.querySelectorAll('.partner-card')):[];
 
+  var EU_HUB={AT:1,BE:1,BG:1,HR:1,CY:1,CZ:1,DK:1,EE:1,FI:1,FR:1,DE:1,GR:1,HU:1,IE:1,IT:1,LV:1,LT:1,LU:1,MT:1,NL:1,PL:1,PT:1,RO:1,SK:1,SI:1,ES:1,SE:1};
   function isAppointed(p){
     if(!p) return false;
     if(p.role==='headquarters') return false;
@@ -221,12 +435,15 @@ export function partnersPageBody(opts: { partners: PartnerRecord[]; sent?: boole
     var cc=(ccSel&&ccSel.value||'').toUpperCase();
     var city=citySel?citySel.value:'';
     var hq=null;
+    var seHub=null;
     var appointedInCountry=0;
     cards.forEach(function(card){
       if(card.getAttribute('data-role')==='headquarters') hq=card;
+      if(isAppointed({role:card.getAttribute('data-role'),status:card.getAttribute('data-status')}) && (card.getAttribute('data-country')||'')==='SE') seHub=card;
       if(cc && isAppointed({role:card.getAttribute('data-role'),status:card.getAttribute('data-status')}) && (card.getAttribute('data-country')||'')===cc) appointedInCountry++;
     });
-    var hqFallback=Boolean(cc && appointedInCountry===0 && hq);
+    var euHubFallback=Boolean(cc && appointedInCountry===0 && EU_HUB[cc] && seHub);
+    var hqFallback=Boolean(cc && appointedInCountry===0 && !euHubFallback && hq);
     var n=0;
     cards.forEach(function(card){
       var codeEl=card.querySelector('.code');
@@ -234,7 +451,11 @@ export function partnersPageBody(opts: { partners: PartnerRecord[]; sent?: boole
       if(codeEl && def) codeEl.textContent=def;
       card.classList.remove('is-hq-fallback');
       var ok=true;
-      if(hqFallback){
+      if(euHubFallback){
+        ok=card===seHub;
+        if(ok && codeEl && cc!=='SE') codeEl.textContent='EU office · Malmö, Sweden';
+        if(ok) card.classList.add('is-hq-fallback');
+      } else if(hqFallback){
         ok=card===hq;
         if(ok && codeEl && cc!=='US') codeEl.textContent='Global HQ · default';
         if(ok) card.classList.add('is-hq-fallback');
@@ -247,7 +468,8 @@ export function partnersPageBody(opts: { partners: PartnerRecord[]; sent?: boole
       if(ok) n++;
     });
     if(status){
-      if(hqFallback) status.textContent=cc==='US'?${JSON.stringify(t.hqUs)}:${JSON.stringify(t.hqFallback)};
+      if(euHubFallback) status.textContent=cc==='SE'?(${JSON.stringify(t.locations)}.replace('{n}', String(n))):'EU authorized office — Malmö, Sweden.';
+      else if(hqFallback) status.textContent=cc==='US'?${JSON.stringify(t.hqUs)}:${JSON.stringify(t.hqFallback)};
       else if(!cc && !city) status.textContent=${JSON.stringify(t.locations)}.replace('{n}', String(n));
       else status.textContent=n?(${JSON.stringify(t.locations)}.replace('{n}', String(n))):${JSON.stringify(t.noneCity)};
     }

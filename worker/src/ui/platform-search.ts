@@ -7,16 +7,18 @@ export function platformSearchMarkup(lang: string) {
   <button type="button" class="ps-backdrop" data-ps-close tabindex="-1" aria-label="Close search"></button>
   <div class="ps-dialog" role="dialog" aria-modal="true" aria-labelledby="ps-title">
     <div class="ps-head">
-      <div>
+      <div class="ps-head-copy">
         <p class="ps-kicker">Find platforms</p>
         <h4 id="ps-title">Search catalog</h4>
       </div>
-      <kbd class="ps-kbd" data-ps-kbd>Ctrl K</kbd>
-      <button type="button" class="ps-close" data-ps-close aria-label="Close">×</button>
+      <div class="ps-head-tools">
+        <kbd class="ps-kbd" data-ps-kbd>Ctrl K</kbd>
+        <button type="button" class="ps-close" data-ps-close aria-label="Close">×</button>
+      </div>
     </div>
     <label class="sf-search-wrap ps-search-wrap" for="ps-q">
       <span class="sf-search-icon" aria-hidden="true">⌕</span>
-      <input type="search" id="ps-q" class="sf-search" placeholder="SKU, thermal, range, model…" autocomplete="off" enterkeyhint="search" aria-controls="ps-list"/>
+      <input type="search" id="ps-q" class="sf-search" placeholder="SKU, thermal, range, model…" autocomplete="off" enterkeyhint="search" aria-controls="ps-list" aria-autocomplete="list"/>
       <button type="button" class="sf-search-clear" id="ps-q-clear" hidden aria-label="Clear search">×</button>
     </label>
     <p class="sf-live-label" id="ps-label">Type to list platforms</p>
@@ -27,6 +29,7 @@ export function platformSearchMarkup(lang: string) {
 (function(){
   var root=document.getElementById('ps-root');
   if(!root) return;
+  var dialog=root.querySelector('.ps-dialog');
   var lang=root.getAttribute('data-lang')||'en';
   var input=document.getElementById('ps-q');
   var clearBtn=document.getElementById('ps-q-clear');
@@ -195,6 +198,15 @@ export function platformSearchMarkup(lang: string) {
     }).catch(function(){ render([], 'Search failed'); });
   }
 
+  function focusables(){
+    if(!dialog) return [];
+    return Array.prototype.slice.call(dialog.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(function(el){
+      return el.offsetParent!==null || el===document.activeElement;
+    });
+  }
+
   function openPs(){
     lastFocus=document.activeElement;
     root.hidden=false;
@@ -236,6 +248,20 @@ export function platformSearchMarkup(lang: string) {
       e.preventDefault();
       e.stopImmediatePropagation();
       closePs();
+      return;
+    }
+    if(isOpen()&&e.key==='Tab'){
+      var nodes=focusables();
+      if(!nodes.length) return;
+      var first=nodes[0];
+      var last=nodes[nodes.length-1];
+      if(e.shiftKey&&document.activeElement===first){
+        e.preventDefault();
+        last.focus();
+      } else if(!e.shiftKey&&document.activeElement===last){
+        e.preventDefault();
+        first.focus();
+      }
     }
   }, true);
   document.addEventListener('keydown', function(e){
